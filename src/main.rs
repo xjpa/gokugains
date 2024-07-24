@@ -35,15 +35,21 @@ fn main() {
 
         match choice.trim() {
             "1" => {
-                add_exercise(file_path);
+                if let Err(e) = add_exercise(file_path) {
+                    println!("Error adding exercise: {}", e);
+                }
                 pause();
             }
             "2" => {
-                view_exercises(file_path);
+                if let Err(e) = view_exercises(file_path) {
+                    println!("Error viewing exercises: {}", e);
+                }
                 pause();
             }
             "3" => {
-                view_summary(file_path);
+                if let Err(e) = view_summary(file_path) {
+                    println!("Error viewing summary: {}", e);
+                }
                 pause();
             }
             "4" => break,
@@ -55,23 +61,14 @@ fn main() {
     }
 }
 
-fn add_exercise(file_path: &str) {
+fn add_exercise(file_path: &str) -> io::Result<()> {
     print!("Enter exercise type: ");
-    io::stdout().flush().unwrap();
+    io::stdout().flush()?;
     let mut exercise_type = String::new();
-    io::stdin().read_line(&mut exercise_type).unwrap();
+    io::stdin().read_line(&mut exercise_type)?;
 
-    print!("Enter number of sets: ");
-    io::stdout().flush().unwrap();
-    let mut sets = String::new();
-    io::stdin().read_line(&mut sets).unwrap();
-    let sets: u32 = sets.trim().parse().unwrap();
-
-    print!("Enter number of reps per set: ");
-    io::stdout().flush().unwrap();
-    let mut reps = String::new();
-    io::stdin().read_line(&mut reps).unwrap();
-    let reps: u32 = reps.trim().parse().unwrap();
+    let sets = get_positive_integer("Enter number of sets: ")?;
+    let reps = get_positive_integer("Enter number of reps per set: ")?;
 
     let exercise = Exercise {
         type_: exercise_type.trim().to_string(),
@@ -79,7 +76,7 @@ fn add_exercise(file_path: &str) {
         reps,
     };
 
-    let mut entries = load_entries(file_path);
+    let mut entries = load_entries(file_path)?;
     let today = Local::now().format("%Y-%m-%d").to_string();
 
     if let Some(entry) = entries.iter_mut().find(|e| e.date == today) {
@@ -91,12 +88,26 @@ fn add_exercise(file_path: &str) {
         });
     }
 
-    save_entries(file_path, &entries);
+    save_entries(file_path, &entries)?;
     println!("Exercise added successfully!");
+    Ok(())
 }
 
-fn view_exercises(file_path: &str) {
-    let entries = load_entries(file_path);
+fn get_positive_integer(prompt: &str) -> io::Result<u32> {
+    loop {
+        print!("{}", prompt);
+        io::stdout().flush()?;
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        match input.trim().parse() {
+            Ok(num) if num > 0 => return Ok(num),
+            _ => println!("Please enter a positive integer."),
+        }
+    }
+}
+
+fn view_exercises(file_path: &str) -> io::Result<()> {
+    let entries = load_entries(file_path)?;
     for entry in entries {
         println!("Date: {}", entry.date);
         for exercise in entry.exercises {
@@ -107,10 +118,11 @@ fn view_exercises(file_path: &str) {
         }
         println!();
     }
+    Ok(())
 }
 
-fn view_summary(file_path: &str) {
-    let entries = load_entries(file_path);
+fn view_summary(file_path: &str) -> io::Result<()> {
+    let entries = load_entries(file_path)?;
     let mut total_exercises = 0;
     let mut total_sets = 0;
     let mut total_reps = 0;
@@ -139,32 +151,33 @@ fn view_summary(file_path: &str) {
     for (type_, (sets, reps)) in exercises_by_type {
         println!("  - {}: {} sets, {} total reps", type_, sets, reps);
     }
+    Ok(())
 }
 
-fn load_entries(file_path: &str) -> Vec<DayEntry> {
+fn load_entries(file_path: &str) -> io::Result<Vec<DayEntry>> {
     if !Path::new(file_path).exists() {
-        return Vec::new();
+        return Ok(Vec::new());
     }
 
-    let mut file = File::open(file_path).unwrap();
+    let mut file = File::open(file_path)?;
     let mut contents = String::new();
-    file.read_to_string(&mut contents).unwrap();
-    serde_json::from_str(&contents).unwrap_or_else(|_| Vec::new())
+    file.read_to_string(&mut contents)?;
+    serde_json::from_str(&contents).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
-fn save_entries(file_path: &str, entries: &[DayEntry]) {
-    let json = serde_json::to_string_pretty(entries).unwrap();
+fn save_entries(file_path: &str, entries: &[DayEntry]) -> io::Result<()> {
+    let json = serde_json::to_string_pretty(entries)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     let mut file = OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(true)
-        .open(file_path)
-        .unwrap();
-    file.write_all(json.as_bytes()).unwrap();
+        .open(file_path)?;
+    file.write_all(json.as_bytes())
 }
 
 fn pause() {
     println!("\nPress Enter to continue...");
     let mut _input = String::new();
-    io::stdin().read_line(&mut _input).unwrap();
+    let _ = io::stdin().read_line(&mut _input);
 }
