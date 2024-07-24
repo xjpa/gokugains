@@ -7,7 +7,8 @@ use std::path::Path;
 #[derive(Debug, Serialize, Deserialize)]
 struct Exercise {
     type_: String,
-    duration: u32,
+    sets: u32,
+    reps: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -60,15 +61,22 @@ fn add_exercise(file_path: &str) {
     let mut exercise_type = String::new();
     io::stdin().read_line(&mut exercise_type).unwrap();
 
-    print!("Enter duration (minutes): ");
+    print!("Enter number of sets: ");
     io::stdout().flush().unwrap();
-    let mut duration = String::new();
-    io::stdin().read_line(&mut duration).unwrap();
-    let duration: u32 = duration.trim().parse().unwrap();
+    let mut sets = String::new();
+    io::stdin().read_line(&mut sets).unwrap();
+    let sets: u32 = sets.trim().parse().unwrap();
+
+    print!("Enter number of reps per set: ");
+    io::stdout().flush().unwrap();
+    let mut reps = String::new();
+    io::stdin().read_line(&mut reps).unwrap();
+    let reps: u32 = reps.trim().parse().unwrap();
 
     let exercise = Exercise {
         type_: exercise_type.trim().to_string(),
-        duration,
+        sets,
+        reps,
     };
 
     let mut entries = load_entries(file_path);
@@ -92,7 +100,10 @@ fn view_exercises(file_path: &str) {
     for entry in entries {
         println!("Date: {}", entry.date);
         for exercise in entry.exercises {
-            println!("  - {}: {} minutes", exercise.type_, exercise.duration);
+            println!(
+                "  - {}: {} sets x {} reps",
+                exercise.type_, exercise.sets, exercise.reps
+            );
         }
         println!();
     }
@@ -101,23 +112,32 @@ fn view_exercises(file_path: &str) {
 fn view_summary(file_path: &str) {
     let entries = load_entries(file_path);
     let mut total_exercises = 0;
-    let mut total_duration = 0;
+    let mut total_sets = 0;
+    let mut total_reps = 0;
     let mut exercises_by_type = std::collections::HashMap::new();
 
     for entry in entries {
         for exercise in entry.exercises {
             total_exercises += 1;
-            total_duration += exercise.duration;
-            *exercises_by_type.entry(exercise.type_).or_insert(0) += 1;
+            total_sets += exercise.sets;
+            total_reps += exercise.sets * exercise.reps;
+            exercises_by_type
+                .entry(exercise.type_)
+                .and_modify(|e: &mut (u32, u32)| {
+                    e.0 += exercise.sets;
+                    e.1 += exercise.sets * exercise.reps;
+                })
+                .or_insert((exercise.sets, exercise.sets * exercise.reps));
         }
     }
 
     println!("Summary Report");
-    println!("Total exercises: {}", total_exercises);
-    println!("Total duration: {} minutes", total_duration);
+    println!("Total exercises logged: {}", total_exercises);
+    println!("Total sets: {}", total_sets);
+    println!("Total reps: {}", total_reps);
     println!("Exercises by type:");
-    for (type_, count) in exercises_by_type {
-        println!("  - {}: {}", type_, count);
+    for (type_, (sets, reps)) in exercises_by_type {
+        println!("  - {}: {} sets, {} total reps", type_, sets, reps);
     }
 }
 
