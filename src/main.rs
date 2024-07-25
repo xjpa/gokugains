@@ -4,32 +4,34 @@ use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::path::Path;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct Exercise {
     type_: String,
     sets: u32,
     reps: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct DayEntry {
     date: String,
     exercises: Vec<Exercise>,
 }
 
-fn main() {
+fn main() -> io::Result<()> {
     let file_path = "exercises.json";
     loop {
         println!("\n===== GokuGains =====");
         println!("1. Add exercise");
         println!("2. View all exercises");
         println!("3. View summary report");
-        println!("4. Exit");
+        println!("4. Edit exercise");
+        println!("5. Delete exercise");
+        println!("6. Exit");
         print!("Choose an option: ");
-        io::stdout().flush().unwrap();
+        io::stdout().flush()?;
 
         let mut choice = String::new();
-        io::stdin().read_line(&mut choice).unwrap();
+        io::stdin().read_line(&mut choice)?;
 
         println!("\n");
 
@@ -38,27 +40,33 @@ fn main() {
                 if let Err(e) = add_exercise(file_path) {
                     println!("Error adding exercise: {}", e);
                 }
-                pause();
             }
             "2" => {
                 if let Err(e) = view_exercises(file_path) {
                     println!("Error viewing exercises: {}", e);
                 }
-                pause();
             }
             "3" => {
                 if let Err(e) = view_summary(file_path) {
                     println!("Error viewing summary: {}", e);
                 }
-                pause();
             }
-            "4" => break,
-            _ => {
-                println!("Invalid option, please try again.");
-                pause();
+            "4" => {
+                if let Err(e) = edit_exercise(file_path) {
+                    println!("Error editing exercise: {}", e);
+                }
             }
+            "5" => {
+                if let Err(e) = delete_exercise(file_path) {
+                    println!("Error deleting exercise: {}", e);
+                }
+            }
+            "6" => break,
+            _ => println!("Invalid option, please try again."),
         }
+        pause();
     }
+    Ok(())
 }
 
 fn add_exercise(file_path: &str) -> io::Result<()> {
@@ -91,6 +99,116 @@ fn add_exercise(file_path: &str) -> io::Result<()> {
     save_entries(file_path, &entries)?;
     println!("Exercise added successfully!");
     Ok(())
+}
+
+fn edit_exercise(file_path: &str) -> io::Result<()> {
+    let mut entries = load_entries(file_path)?;
+
+    println!("Select the date of the exercise you want to edit:");
+    for (i, entry) in entries.iter().enumerate() {
+        println!("{}. {}", i + 1, entry.date);
+    }
+
+    let date_index = get_index_input(entries.len())? - 1;
+
+    println!("Select the exercise you want to edit:");
+    for (i, exercise) in entries[date_index].exercises.iter().enumerate() {
+        println!(
+            "{}. {} - {} sets x {} reps",
+            i + 1,
+            exercise.type_,
+            exercise.sets,
+            exercise.reps
+        );
+    }
+
+    let exercise_index = get_index_input(entries[date_index].exercises.len())? - 1;
+
+    let exercise = &mut entries[date_index].exercises[exercise_index];
+
+    println!(
+        "Editing: {} - {} sets x {} reps",
+        exercise.type_, exercise.sets, exercise.reps
+    );
+
+    print!("Enter new exercise type (or press Enter to keep current): ");
+    io::stdout().flush()?;
+    let mut new_type = String::new();
+    io::stdin().read_line(&mut new_type)?;
+    if !new_type.trim().is_empty() {
+        exercise.type_ = new_type.trim().to_string();
+    }
+
+    print!("Enter new number of sets (or press Enter to keep current): ");
+    io::stdout().flush()?;
+    let mut new_sets = String::new();
+    io::stdin().read_line(&mut new_sets)?;
+    if !new_sets.trim().is_empty() {
+        exercise.sets = new_sets
+            .trim()
+            .parse()
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "Invalid number"))?;
+    }
+
+    print!("Enter new number of reps (or press Enter to keep current): ");
+    io::stdout().flush()?;
+    let mut new_reps = String::new();
+    io::stdin().read_line(&mut new_reps)?;
+    if !new_reps.trim().is_empty() {
+        exercise.reps = new_reps
+            .trim()
+            .parse()
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "Invalid number"))?;
+    }
+
+    save_entries(file_path, &entries)?;
+    println!("Exercise updated successfully!");
+    Ok(())
+}
+
+fn delete_exercise(file_path: &str) -> io::Result<()> {
+    let mut entries = load_entries(file_path)?;
+
+    println!("Select the date of the exercise you want to delete:");
+    for (i, entry) in entries.iter().enumerate() {
+        println!("{}. {}", i + 1, entry.date);
+    }
+
+    let date_index = get_index_input(entries.len())? - 1;
+
+    println!("Select the exercise you want to delete:");
+    for (i, exercise) in entries[date_index].exercises.iter().enumerate() {
+        println!(
+            "{}. {} - {} sets x {} reps",
+            i + 1,
+            exercise.type_,
+            exercise.sets,
+            exercise.reps
+        );
+    }
+
+    let exercise_index = get_index_input(entries[date_index].exercises.len())? - 1;
+
+    entries[date_index].exercises.remove(exercise_index);
+
+    if entries[date_index].exercises.is_empty() {
+        entries.remove(date_index);
+    }
+
+    save_entries(file_path, &entries)?;
+    println!("Exercise deleted successfully!");
+    Ok(())
+}
+
+fn get_index_input(max: usize) -> io::Result<usize> {
+    loop {
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        match input.trim().parse() {
+            Ok(num) if num > 0 && num <= max => return Ok(num),
+            _ => println!("Please enter a number between 1 and {}.", max),
+        }
+    }
 }
 
 fn get_positive_integer(prompt: &str) -> io::Result<u32> {
